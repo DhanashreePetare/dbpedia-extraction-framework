@@ -374,18 +374,54 @@ class ConfigLoader(config: Config)
     //language-independent val
     private lazy val _ontology =
     {
-        val ontologySource = if (config.ontologyFile != null && config.ontologyFile.isFile)
+        if (config.ontologyFile != null && config.ontologyFile.isFile)
         {
-          XMLSource.fromFile(config.ontologyFile, Language.Mappings)
+          // Load from local file
+          val ontologySource = XMLSource.fromFile(config.ontologyFile, Language.Mappings)
+          new OntologyReader().read(ontologySource)
         }
         else
         {
+          // Load from API with retry logic
           val namespaces = Set(Namespace.OntologyClass, Namespace.OntologyProperty)
           val url = new URL(Language.Mappings.apiUri)
           val language = Language.Mappings
-          WikiSource.fromNamespaces(namespaces, url, language)
+          
+          var lastException: Exception = null
+          val maxRetries = 3
+          val baseDelayMs = 2000
+          var success = false
+          var result: Ontology = null
+          
+          for (attempt <- 1 to maxRetries if !success) {
+            try {
+              logger.info(s"Loading ontology from API (attempt $attempt/$maxRetries): ${url}")
+              val ontologySource = WikiSource.fromNamespaces(namespaces, url, language)
+              result = new OntologyReader().read(ontologySource)
+              success = true
+            } catch {
+              case ex: Exception =>
+                lastException = ex
+                if (attempt < maxRetries) {
+                  val delayMs = baseDelayMs * scala.math.pow(2, attempt - 1).toInt
+                  logger.warning(s"Failed to load ontology from API (attempt $attempt/$maxRetries): ${ex.getMessage}. Retrying in ${delayMs}ms...")
+                  Thread.sleep(delayMs)
+                } else {
+                  logger.severe(s"Failed to load ontology from API after $maxRetries attempts. Last error: ${ex.getMessage}")
+                  throw new RuntimeException(s"Failed to load ontology from DBpedia Mappings API (${url}) after $maxRetries attempts. " +
+                    "This may be caused by API unavailability or network issues. " +
+                    "Please check your network connection and verify the API is accessible at https://mappings.dbpedia.org/api.php. " +
+                    "Alternatively, you can manually download ontology.xml and configure the path using the ontologyFile property.", lastException)
+                }
+            }
+          }
+          
+          if (!success) {
+            throw new RuntimeException("Ontology loading failed", lastException)
+          }
+          
+          result
         }
-        new OntologyReader().read(ontologySource)
     }
 
     //language-independent val

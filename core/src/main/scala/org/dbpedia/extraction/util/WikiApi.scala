@@ -312,8 +312,24 @@ class WikiApi(url: URL, language: Language)
 //                    connection.setRequestProperty("User-Agent", customUserAgentText)
 //                }
 //                val reader = connection.getInputStream
-                val xml = XML.load(response.getEntity.getContent)
+                
+                // Validate response content before parsing
+                val content = response.getEntity.getContent
+                val contentLength = if (response.getEntity.getContentLength >= 0) response.getEntity.getContentLength else 0
+                
+                if (contentLength == 0) {
+                    logger.warning(s"WikiApi received empty response for query: ${url + params}")
+                    throw new IOException(s"Empty XML response received from API for query: ${params}")
+                }
+                
+                val xml = XML.load(content)
 //                reader.close()
+                
+                // Validate that XML contains expected structure
+                if (xml == null || xml.isEmpty) {
+                    logger.warning(s"WikiApi received invalid XML for query: ${url + params}")
+                    throw new IOException(s"Invalid or empty XML structure received from API for query: ${params}")
+                }
 
                 return xml
             }
