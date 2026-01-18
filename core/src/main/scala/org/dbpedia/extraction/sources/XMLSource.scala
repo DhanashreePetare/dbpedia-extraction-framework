@@ -30,6 +30,22 @@ object XMLSource
      * @param language if given, parser expects file to be in this language and doesn't read language from siteinfo element
      */
     def fromFile(file: File, language: Language, filter: WikiTitle => Boolean = _ => true) : Source = {
+      // Validate file exists and has content
+      if (!file.exists()) {
+        throw new IllegalArgumentException(s"XML file does not exist: ${file.getAbsolutePath}")
+      }
+      
+      if (file.length() == 0) {
+        throw new IllegalArgumentException(s"XML file is empty: ${file.getAbsolutePath}. " +
+          s"This may indicate a failed download from the DBpedia API. Please check the API at ${language.apiUri} " +
+          s"or manually download the file and place it in the correct location.")
+      }
+      
+      if (file.length() < 100) {
+        throw new IllegalArgumentException(s"XML file is suspiciously small (${file.length()} bytes): ${file.getAbsolutePath}. " +
+          s"This may indicate a malformed or incomplete download from the DBpedia API.")
+      }
+      
       fromReader(() => new InputStreamReader(new FileInputStream(file), "UTF-8"), language, filter)
     }
 

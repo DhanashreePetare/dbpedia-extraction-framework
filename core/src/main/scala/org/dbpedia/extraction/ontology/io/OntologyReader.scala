@@ -18,8 +18,27 @@ class OntologyReader
     def read(source : Source) : Ontology =
     {
         logger.info("Loading ontology pages")
+        
+        val pages = try {
+            source.map(WikiParser.getInstance()).flatten.toList
+        } catch {
+            case ex: Exception =>
+                logger.severe(s"Failed to parse ontology source: ${ex.getMessage}")
+                throw new RuntimeException("Failed to load ontology from source. " +
+                    "This may be caused by an empty or malformed ontology.xml file downloaded from the DBpedia API. " +
+                    "Please verify the API is accessible and returning valid data.", ex)
+        }
+        
+        if (pages.isEmpty) {
+            logger.warning("Ontology source contained no pages. This may indicate an API failure or empty response.")
+            throw new IllegalStateException("Ontology source is empty. No pages were found in the ontology XML. " +
+                "Please check if the DBpedia Mappings API (https://mappings.dbpedia.org/api.php) is accessible " +
+                "and returning valid ontology data.")
+        }
+        
+        logger.info(s"Successfully loaded ${pages.size} ontology pages")
 
-        read(source.map(WikiParser.getInstance()).flatten)
+        read(pages)
     }
 
     /**
